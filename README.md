@@ -89,7 +89,7 @@ For production deployments, see our [configuration guide](https://david-crty.git
 
 | Engine     | Supported Versions           | CLI Tool                     | Restore |
 |------------|------------------------------|------------------------------|---------|
-| MySQL      | 5.6, 5.7, 8.x, 9.x           | `mariadb-dump`               | Yes     |
+| MySQL      | 5.6, 5.7, 8.x, 9.x           | `mysqldump` / `mariadb-dump` | Yes     |
 | MariaDB    | 10.x, 11.x, 12.x             | `mariadb-dump`               | Yes     |
 | PostgreSQL | 12, 13, 14, 15, 16, 17, 18   | `pg_dump` v18                | Yes     |
 | SQL Server | 2017, 2019, 2022, Azure SQL  | `sqlpackage` (`.dacpac`)     | Yes     |

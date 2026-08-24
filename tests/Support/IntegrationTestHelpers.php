@@ -353,6 +353,23 @@ class IntegrationTestHelpers
     }
 
     /**
+     * Whether the image ships Oracle's mysqldump rather than the alias
+     * mariadb-client leaves behind under the same name.
+     *
+     * Pull requests run the test suite inside the published base image, which
+     * only gains the binary once main republishes it, so MySQL-variant tests
+     * skip rather than fail there.
+     */
+    public static function oracleMysqldumpAvailable(): bool
+    {
+        $output = [];
+        $status = 0;
+        exec('mysqldump --version 2>&1', $output, $status);
+
+        return $status === 0 && ! str_contains(strtolower(implode(' ', $output)), 'mariadb');
+    }
+
+    /**
      * Connect to a database.
      */
     public static function connectToDatabase(string $type, DatabaseServer $server, string $databaseName): PDO

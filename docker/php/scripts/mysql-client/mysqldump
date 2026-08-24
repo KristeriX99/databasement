@@ -1,0 +1,4 @@
+#!/bin/sh
+exec /opt/mysql/compat/ld.so \
+    --library-path /opt/mysql/compat \
+    /opt/mysql/bin/mysqldump "$@"

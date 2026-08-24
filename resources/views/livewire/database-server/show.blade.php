@@ -11,6 +11,7 @@
         $isSqlite = $server->database_type === DatabaseType::SQLITE;
         $isPostgres = $server->database_type === DatabaseType::POSTGRESQL;
         $sslEnabled = (bool) $server->getExtraConfig('ssl_enabled', false);
+        $isOracleMysql = $server->getExtraConfig('mysql_variant') === 'mysql';
         $authSource = $server->getExtraConfig('auth_source');
         $dumpFlags = $server->getExtraConfig('dump_flags');
         $dumpFormat = $isPostgres ? ($server->getExtraConfig('dump_format', 'plain')) : null;
@@ -357,6 +358,13 @@
                             </div>
                         </li>
                         @if($server->database_type === DatabaseType::MYSQL)
+                            <li class="list-row">
+                                <x-icon name="o-server-stack" class="w-4 h-4 opacity-60" />
+                                <div>
+                                    <div class="text-xs uppercase font-semibold opacity-60">{{ __('Flavour') }}</div>
+                                    <div class="text-sm">{{ $isOracleMysql ? __('MySQL (Oracle)') : __('MariaDB') }}</div>
+                                </div>
+                            </li>
                             <li class="list-row">
                                 <x-icon name="o-shield-check" class="w-4 h-4 opacity-60" />
                                 <div>

@@ -407,3 +407,70 @@ test('firebird backup and restore workflow', function () {
     $rowCount = IntegrationTestHelpers::verifyFirebirdRestore($this->databaseServer, $this->restoredDatabaseName);
     expect($rowCount)->toBe(3);
 });
+
+test('mysql backup and restore round-trips a stored generated column', function (string $variant) {
+    AppConfig::set('backup.compression', 'gzip');
+
+    app()->forgetInstance(CompressorInterface::class);
+    app()->forgetInstance(BackupTask::class);
+    app()->forgetInstance(RestoreTask::class);
+
+    $this->volume = IntegrationTestHelpers::createVolume('mysql');
+    $this->databaseServer = IntegrationTestHelpers::createDatabaseServer('mysql');
+    $this->databaseServer->update([
+        'extra_config' => array_merge(
+            $this->databaseServer->extra_config ?? [],
+            ['mysql_variant' => $variant],
+        ),
+    ]);
+    $this->backup = IntegrationTestHelpers::createBackup($this->databaseServer, $this->volume);
+    $this->databaseServer->load('backups.volumes');
+
+    IntegrationTestHelpers::loadTestData('mysql', $this->databaseServer);
+
+    // Kept out of the shared fixture on purpose: dumps order tables
+    // alphabetically, so an "invoices" table would land ahead of the others and
+    // abort every default-variant restore on the very bug this test covers.
+    $sourceDatabase = IntegrationTestHelpers::resolveTestDatabaseName($this->databaseServer);
+    $source = IntegrationTestHelpers::connectToDatabase('mysql', $this->databaseServer, $sourceDatabase);
+    $source->exec('CREATE TABLE invoices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        net DECIMAL(10, 2) NOT NULL,
+        vat DECIMAL(10, 2) AS (net * 0.2) STORED,
+        gross DECIMAL(10, 2) AS (net + vat) VIRTUAL
+    ) ENGINE=InnoDB');
+    $source->exec('INSERT INTO invoices (net) VALUES (100.00), (250.00)');
+
+    $snapshots = $this->backupJobFactory->createSnapshots(
+        backup: $this->backup,
+        method: 'manual',
+    );
+    $this->snapshot = $snapshots[0];
+    ProcessBackupJob::dispatchSync($this->snapshot->id);
+    $this->snapshot->refresh();
+    $this->snapshot->load('job');
+
+    expect($this->snapshot->job->status)->toBe(BackupJobStatus::Completed);
+
+    $suffix = IntegrationTestHelpers::getParallelSuffix();
+    $this->restoredDatabaseName = 'testdb_generated_'.hrtime(true).$suffix;
+    $restore = $this->backupJobFactory->createRestore(
+        snapshot: $this->snapshot,
+        targetServer: $this->databaseServer,
+        schemaName: $this->restoredDatabaseName,
+    );
+    ProcessRestoreJob::dispatchSync($restore->id);
+
+    $pdo = IntegrationTestHelpers::connectToDatabase('mysql', $this->databaseServer, $this->restoredDatabaseName);
+
+    // The schema always survives; only the rows are lost when the dump wrote
+    // values into the stored column, so the row count is the real assertion.
+    expect($pdo->query('SHOW CREATE TABLE invoices')->fetchColumn(1))->toContain('GENERATED ALWAYS')
+        ->and((int) $pdo->query('SELECT COUNT(*) FROM invoices')->fetchColumn())->toBe(2)
+        ->and((float) $pdo->query('SELECT vat FROM invoices ORDER BY id LIMIT 1')->fetchColumn())->toBe(20.0);
+})->with([
+    'mysql client' => ['mysql'],
+])->skip(
+    fn () => ! IntegrationTestHelpers::oracleMysqldumpAvailable(),
+    'Oracle mysqldump is not in this image',
+);

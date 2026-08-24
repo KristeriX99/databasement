@@ -308,3 +308,51 @@ test('testConnectionForServer returns SSH failure', function () {
     expect($result['success'])->toBeFalse()
         ->and($result['message'])->toContain('SSH connection failed');
 });
+
+test('makeForServer passes mysql_variant from extra_config', function () {
+    $server = DatabaseServer::factory()->create([
+        'database_type' => 'mysql',
+        'host' => 'db.example.com',
+        'port' => 3306,
+        'username' => 'root',
+        'password' => 'secret',
+        'extra_config' => ['mysql_variant' => 'mysql'],
+    ]);
+
+    $database = (new DatabaseProvider)->makeForServer($server, 'myapp', 'db.example.com', 3306);
+
+    expect($database->dump('/tmp/test.sql')->command)->toStartWith('mysqldump ');
+});
+
+test('makeFromConfig passes mysql_variant from extra_config', function () {
+    // The agent path: a key that only works through makeForServer silently
+    // leaves remote agents dumping with the wrong client.
+    $config = new \App\Services\Backup\DTO\DatabaseConnectionConfig(
+        databaseType: DatabaseType::MYSQL,
+        serverName: 'MySQL Server',
+        host: 'db.example.com',
+        port: 3306,
+        username: 'root',
+        password: 'secret',
+        extraConfig: ['mysql_variant' => 'mysql'],
+    );
+
+    $database = (new DatabaseProvider)->makeFromConfig($config, 'myapp', 'db.example.com', 3306);
+
+    expect($database->dump('/tmp/test.sql')->command)->toStartWith('mysqldump ');
+});
+
+test('makeFromConfig falls back to the mariadb client without a mysql_variant', function () {
+    $config = new \App\Services\Backup\DTO\DatabaseConnectionConfig(
+        databaseType: DatabaseType::MYSQL,
+        serverName: 'MySQL Server',
+        host: 'db.example.com',
+        port: 3306,
+        username: 'root',
+        password: 'secret',
+    );
+
+    $database = (new DatabaseProvider)->makeFromConfig($config, 'myapp', 'db.example.com', 3306);
+
+    expect($database->dump('/tmp/test.sql')->command)->toStartWith('mariadb-dump ');
+});

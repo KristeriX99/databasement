@@ -117,6 +117,10 @@ class DatabaseProvider
             $dbConfig['probe_server_version'] = true;
         }
 
+        if ($config->databaseType === DatabaseType::MYSQL && ! empty($extra['mysql_variant'])) {
+            $dbConfig['mysql_variant'] = $extra['mysql_variant'];
+        }
+
         if ($config->databaseType === DatabaseType::POSTGRESQL
             && ($snapshotDumpFormat ?? $extra['dump_format'] ?? null) === 'custom') {
             $dbConfig['dump_format'] = 'custom';

@@ -186,3 +186,84 @@ test('testConnection returns failure when process fails', function () {
     expect($result['success'])->toBeFalse()
         ->and($result['message'])->toContain('Access denied');
 });
+
+/** The same server, declared as Oracle MySQL rather than MariaDB. */
+function oracleMysqlDatabase(array $overrides = []): MysqlDatabase
+{
+    $db = new MysqlDatabase;
+    $db->setConfig(array_merge([
+        'host' => 'db.local',
+        'port' => 3306,
+        'user' => 'root',
+        'pass' => 'secret',
+        'database' => 'myapp',
+        'mysql_variant' => MysqlDatabase::VARIANT_MYSQL,
+    ], $overrides));
+
+    return $db;
+}
+
+test('dump uses mysqldump for the mysql variant', function () {
+    $result = oracleMysqlDatabase()->dump('/tmp/dump.sql');
+
+    expect($result->command)->toBe("mysqldump --single-transaction --routines --add-drop-table --hex-blob --quote-names --no-tablespaces --column-statistics=0 --set-gtid-purged=OFF --ssl-mode=DISABLED --host='db.local' --port='3306' --user='root' --password='secret' 'myapp' > '/tmp/dump.sql'")
+        ->and($result->command)->not->toContain('mariadb-dump');
+});
+
+test('dump uses ssl-mode=REQUIRED for the mysql variant when ssl_enabled is true', function () {
+    $result = oracleMysqlDatabase(['ssl_enabled' => true])->dump('/tmp/dump.sql');
+
+    expect($result->command)->toContain('--ssl-mode=REQUIRED')
+        ->not->toContain('--ssl-mode=DISABLED')
+        // mysqldump 8.0 removed all three of these; passing any of them aborts the dump.
+        ->not->toContain('--ssl ')
+        ->not->toContain('--ssl-verify-server-cert')
+        ->not->toContain('--skip_ssl');
+});
+
+test('dump keeps --routines for the mysql variant on versions the MariaDB client rejects', function () {
+    // 26.7 clears the MariaDB client's package gate (#494), but Oracle's client
+    // has no such gate — the routines survive and no warning is logged.
+    $db = Mockery::mock(MysqlDatabase::class)->makePartial()->shouldAllowMockingProtectedMethods();
+    $db->shouldNotReceive('createPdo');
+    $db->setConfig([
+        'host' => 'db.local',
+        'port' => 3306,
+        'user' => 'root',
+        'pass' => 'secret',
+        'database' => 'myapp',
+        'probe_server_version' => true,
+        'mysql_variant' => MysqlDatabase::VARIANT_MYSQL,
+    ]);
+
+    $result = $db->dump('/tmp/dump.sql');
+
+    expect($result->command)->toContain('--routines')
+        ->and($result->log)->toBeNull();
+});
+
+test('dump keeps the mariadb client unless the variant explicitly asks for mysql', function (?string $variant) {
+    $db = new MysqlDatabase;
+    $db->setConfig(array_filter([
+        'host' => 'db.local',
+        'port' => 3306,
+        'user' => 'root',
+        'pass' => 'secret',
+        'database' => 'myapp',
+        'mysql_variant' => $variant,
+    ], fn ($value) => $value !== null));
+
+    expect($db->dump('/tmp/dump.sql')->command)
+        ->toBe("mariadb-dump --single-transaction --routines --add-drop-table --hex-blob --quote-names --skip_ssl --host='db.local' --port='3306' --user='root' --password='secret' 'myapp' > '/tmp/dump.sql'");
+})->with([
+    'explicit mariadb' => [MysqlDatabase::VARIANT_MARIADB],
+    'unset' => [null],
+]);
+
+test('restore keeps the mariadb client for the mysql variant', function () {
+    // The client only pipes SQL at the server and reads either dump, so the
+    // variant deliberately does not reach it.
+    $result = oracleMysqlDatabase()->restore('/tmp/restore.sql');
+
+    expect($result->command)->toBe("mariadb --host='db.local' --port='3306' --user='root' --password='secret' --skip_ssl 'myapp' -e 'source /tmp/restore.sql'");
+});

@@ -351,7 +351,7 @@ class DatabaseServer extends Model
 
     /**
      * Move type-specific fields (auth_source, srv_enabled, connection_options,
-     * dump_flags, ssl_enabled) into extra_config.
+     * dump_flags, ssl_enabled, mysql_variant) into extra_config.
      * Clears stale keys when database type has changed.
      *
      * @param  array<string, mixed>  $data
@@ -375,6 +375,7 @@ class DatabaseServer extends Model
             ['dump_format',         fn ($v) => $type === DatabaseType::POSTGRESQL->value && $v === 'custom',       fn () => 'custom'],
             ['dump_privileges',     fn ($v) => $type === DatabaseType::POSTGRESQL->value && $v,                    fn () => true],
             ['ssl_enabled',         fn ($v) => in_array($type, [DatabaseType::MYSQL->value, DatabaseType::POSTGRESQL->value], true) && $v, fn () => true],
+            ['mysql_variant',       fn ($v) => $type === DatabaseType::MYSQL->value && $v === 'mysql',             fn () => 'mysql'],
         ];
 
         foreach ($rules as [$key, $keep, $store]) {
