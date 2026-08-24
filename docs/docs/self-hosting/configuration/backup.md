@@ -52,7 +52,7 @@ Commands must exist on the host that runs the script. The **official Docker imag
 | Shell | `sh` (default), `bash` |
 | HTTP / network | `curl`, `wget` (BusyBox), `ssh`, `scp`, `sshpass` |
 | Archives | `gzip`, `zstd`, `7z`, `unzip` |
-| Database clients | `mysql` / `mariadb`, `mysqldump`, `psql`, `pg_dump`, `pg_restore`, `redis-cli`, `sqlite3`, `mongodump`, `mongorestore`, `gbak`, `isql` |
+| Database clients | `mysql` / `mariadb`, `mysqldump` (Oracle) / `mariadb-dump`, `psql`, `pg_dump`, `pg_restore`, `redis-cli`, `sqlite3`, `mongodump`, `mongorestore`, `gbak`, `isql` |
 | Core utilities | `date`, `grep`, `sed`, `awk`, `find`, `cat`, `head`, `tail`, `cut`, `tr`, `wc`, `ps`, `git` |
 
 :::note

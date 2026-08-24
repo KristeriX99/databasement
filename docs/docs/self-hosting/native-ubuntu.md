@@ -51,7 +51,13 @@ sudo apt install -y mariadb-client
 ```
 
 :::note
-Databasement uses the MariaDB CLI tools (`mariadb-dump`, `mariadb`) to back up and restore both MariaDB and MySQL servers.
+Databasement restores and tests connections with the MariaDB CLI tools (`mariadb-dump`, `mariadb`) for both MariaDB and MySQL servers.
+
+Servers set to the **MySQL (Oracle)** flavour dump with Oracle's `mysqldump`, which Ubuntu packages separately. Without it those backups fail with `mysqldump: not found`:
+
+```bash
+sudo apt install -y mysql-client-core-8.0
+```
 :::
 
 ### For PostgreSQL backups

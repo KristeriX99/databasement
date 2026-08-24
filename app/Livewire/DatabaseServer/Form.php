@@ -15,6 +15,7 @@ use App\Models\DatabaseServerSshConfig;
 use App\Models\NotificationChannel;
 use App\Rules\ExcludedTableNames;
 use App\Services\Backup\Databases\DatabaseProvider;
+use App\Services\Backup\Databases\MysqlDatabase;
 use App\Services\Backup\ShellProcessor;
 use App\Services\Backup\SyncBackupConfigurationsAction;
 use App\Services\CurrentOrganization;
@@ -74,6 +75,9 @@ class Form extends \Livewire\Form
     public bool $dump_config_open = false;
 
     public bool $ssl_enabled = false;
+
+    // Which client dumps this server; see MysqlDatabase::VARIANT_*.
+    public string $mysql_variant = 'mariadb';
 
     // SSH Tunnel Configuration
     public bool $ssh_enabled = false;
@@ -470,6 +474,7 @@ class Form extends \Livewire\Form
         $this->dump_privileges = (bool) $server->getExtraConfig('dump_privileges', false);
         $this->dump_config_open = ! empty($this->dump_flags) || ! empty($this->excluded_tables) || $this->dump_format === 'custom' || $this->dump_privileges;
         $this->ssl_enabled = (bool) $server->getExtraConfig('ssl_enabled', false);
+        $this->mysql_variant = $server->getExtraConfig('mysql_variant', MysqlDatabase::VARIANT_MARIADB);
         $this->username = $server->username ?? '';
         $this->description = $server->description;
         $this->agent_id = $server->agent_id;
@@ -652,6 +657,14 @@ class Form extends \Livewire\Form
     public function isPostgresql(): bool
     {
         return $this->database_type === 'postgres';
+    }
+
+    /**
+     * Check if current database type is MySQL or MariaDB.
+     */
+    public function isMysql(): bool
+    {
+        return $this->database_type === 'mysql';
     }
 
     /**

@@ -18,8 +18,27 @@ class MysqlDatabase implements DatabaseInterface
     /** Cached VERSION() result; '' means "asked and could not tell". */
     private ?string $serverVersion = null;
 
-    private const string DUMP_BINARY = 'mariadb-dump';
+    /**
+     * Server flavour, stored per server in extra_config. MariaDB stays the
+     * default so existing servers keep the exact command they had before.
+     */
+    public const string VARIANT_MARIADB = 'mariadb';
 
+    public const string VARIANT_MYSQL = 'mysql';
+
+    private const string MARIADB_DUMP_BINARY = 'mariadb-dump';
+
+    /**
+     * Oracle's client. The MariaDB one omits the column list on INSERT and
+     * writes STORED GENERATED values with it, which MySQL rejects on restore
+     * (ERROR 3105), silently leaving those tables empty.
+     */
+    private const string MYSQL_DUMP_BINARY = 'mysqldump';
+
+    /**
+     * Restores and connection tests always use the MariaDB client: it only
+     * pipes SQL at the server and reads dumps from either client just fine.
+     */
     private const string CLIENT_BINARY = 'mariadb';
 
     private const array DUMP_OPTIONS = [
@@ -28,6 +47,15 @@ class MysqlDatabase implements DatabaseInterface
         '--add-drop-table',     // Add DROP TABLE before each CREATE TABLE
         '--hex-blob',           // Encode binary data as hex for safer transport
         '--quote-names',        // Quote identifiers with backticks
+    ];
+
+    /**
+     * Options only Oracle's client understands, appended for the MySQL variant.
+     */
+    private const array MYSQL_DUMP_OPTIONS = [
+        '--no-tablespaces',      // Skip the tablespace query, which needs the global PROCESS privilege
+        '--column-statistics=0', // information_schema.COLUMN_STATISTICS is absent before MySQL 8.0
+        '--set-gtid-purged=OFF', // Keep GTID state out of a snapshot meant to restore anywhere
     ];
 
     /** Server version from which the MariaDB client dumps stored packages. */
@@ -57,6 +85,42 @@ class MysqlDatabase implements DatabaseInterface
     }
 
     /**
+     * The selectable server flavours.
+     *
+     * @return array<int, string>
+     */
+    public static function variants(): array
+    {
+        return [self::VARIANT_MARIADB, self::VARIANT_MYSQL];
+    }
+
+    /**
+     * Whether this server is Oracle MySQL rather than MariaDB.
+     */
+    private function isMysqlVariant(): bool
+    {
+        return ($this->config['mysql_variant'] ?? self::VARIANT_MARIADB) === self::VARIANT_MYSQL;
+    }
+
+    /**
+     * SSL flag for the dump client.
+     *
+     * mysqldump dropped --ssl, --skip_ssl and --ssl-verify-server-cert in 8.0;
+     * --ssl-mode replaces all three. REQUIRED encrypts without verifying the
+     * certificate, which is what the MariaDB pair above asks for.
+     */
+    private function getDumpSslFlag(): string
+    {
+        if (! $this->isMysqlVariant()) {
+            return $this->getSslFlag();
+        }
+
+        return ! empty($this->config['ssl_enabled'])
+            ? '--ssl-mode=REQUIRED'
+            : '--ssl-mode=DISABLED';
+    }
+
+    /**
      * @param  array<string, mixed>  $config
      */
     public function setConfig(array $config): void
@@ -66,14 +130,16 @@ class MysqlDatabase implements DatabaseInterface
 
     public function dump(string $outputPath): DatabaseOperationResult
     {
-        $options = self::DUMP_OPTIONS;
-        $options[] = $this->getSslFlag();
+        $options = $this->isMysqlVariant()
+            ? array_merge(self::DUMP_OPTIONS, self::MYSQL_DUMP_OPTIONS)
+            : self::DUMP_OPTIONS;
+        $options[] = $this->getDumpSslFlag();
 
         $log = null;
         if (! $this->canDumpRoutines()) {
             $options = array_values(array_diff($options, ['--routines']));
             $log = new DatabaseOperationLog(
-                'Stored routines were excluded from this dump: the MariaDB client cannot dump routines from a MySQL server reporting version '.$this->serverVersion().'.',
+                'Stored routines were excluded from this dump: the MariaDB client cannot dump routines from a MySQL server reporting version '.$this->serverVersion().'. Set the server flavour to MySQL to keep them.',
                 'warning',
             );
         }
@@ -83,7 +149,7 @@ class MysqlDatabase implements DatabaseInterface
             $extraFlags = ' '.DatabaseOperationResult::escapeFlags($this->config['dump_flags']);
         }
 
-        // mariadb-dump qualifies --ignore-table by schema, so the names are
+        // Both clients qualify --ignore-table by schema, so the names are
         // expanded against whichever database this dump targets.
         $extraFlags .= DatabaseOperationResult::escapeTableExclusions(
             '--ignore-table',
@@ -91,10 +157,10 @@ class MysqlDatabase implements DatabaseInterface
             $this->config['database'].'.',
         );
 
-        // Flags must come before the database name; mariadb-dump treats anything after it as table names
+        // Flags must come before the database name; both clients treat anything after it as table names
         $command = sprintf(
             '%s %s --host=%s --port=%s --user=%s --password=%s%s %s',
-            self::DUMP_BINARY,
+            $this->isMysqlVariant() ? self::MYSQL_DUMP_BINARY : self::MARIADB_DUMP_BINARY,
             implode(' ', $options),
             escapeshellarg($this->config['host']),
             escapeshellarg((string) $this->config['port']),
@@ -117,6 +183,11 @@ class MysqlDatabase implements DatabaseInterface
      */
     private function canDumpRoutines(): bool
     {
+        // Oracle's client has no package gate, so it never needs the probe.
+        if ($this->isMysqlVariant()) {
+            return true;
+        }
+
         $version = $this->serverVersion();
 
         if ($version === null || str_contains(strtolower($version), 'mariadb')) {

@@ -672,3 +672,44 @@ test('without manage-database-servers, the create screen is forbidden', function
         ->test(Create::class)
         ->assertForbidden();
 });
+
+test('can create mysql database server with the oracle client variant', function () {
+    $user = User::factory()->withAbilities([Ability::ManageDatabaseServers->value])->create();
+    $volume = Volume::factory()->local()->create(['name' => 'Test Volume']);
+
+    Livewire::actingAs($user)
+        ->test(Create::class)
+        ->set('form.name', 'Oracle MySQL')
+        ->set('form.database_type', 'mysql')
+        ->set('form.host', 'mysql.example.com')
+        ->set('form.port', 3306)
+        ->set('form.username', 'dbuser')
+        ->set('form.password', 'secret123')
+        ->set('form.mysql_variant', 'mysql')
+        ->set('form.backups.0.database_names.0', 'myapp')
+        ->set('form.backups.0.volume_ids', [$volume->id])
+        ->set('form.backups.0.backup_schedule_id', dailySchedule()->id)
+        ->set('form.backups.0.retention_days', 14)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $server = DatabaseServer::where('name', 'Oracle MySQL')->first();
+
+    expect($server->getExtraConfig('mysql_variant'))->toBe('mysql');
+});
+
+test('mysql dump command preview follows the selected client variant', function () {
+    // The preview builds its own config array, so a variant wired only into
+    // extraConfig() would leave it advertising a command that never runs.
+    $user = User::factory()->withAbilities([Ability::ManageDatabaseServers->value])->create();
+
+    $component = Livewire::actingAs($user)
+        ->test(Create::class)
+        ->set('form.database_type', 'mysql');
+
+    expect($component->viewData('form')->getDumpCommandPreview())->toStartWith('mariadb-dump ');
+
+    $component->set('form.mysql_variant', 'mysql');
+
+    expect($component->viewData('form')->getDumpCommandPreview())->toStartWith('mysqldump ');
+});

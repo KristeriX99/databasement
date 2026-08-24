@@ -20,9 +20,16 @@ When you create a backup, Databasement:
 
 Databasement uses native database tools for reliable backups:
 
-**MySQL/MariaDB:**
+**MySQL/MariaDB:** the client follows the server's **Server flavour** setting.
+
 ```bash
-mariadb-dump --routines --add-drop-table --complete-insert --hex-blob --quote-names --skip_ssl \
+# MariaDB (default)
+mariadb-dump --single-transaction --routines --add-drop-table --hex-blob --quote-names --skip_ssl \
+  --host='...' --port='...' --user='...' --password='...' 'database_name' > dump.sql
+
+# MySQL (Oracle)
+mysqldump --single-transaction --routines --add-drop-table --hex-blob --quote-names \
+  --no-tablespaces --column-statistics=0 --set-gtid-purged=OFF --ssl-mode=DISABLED \
   --host='...' --port='...' --user='...' --password='...' 'database_name' > dump.sql
 ```
 

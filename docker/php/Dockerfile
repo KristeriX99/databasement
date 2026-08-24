@@ -1,5 +1,20 @@
 FROM firebirdsql/firebird:5 AS firebird
 
+# Oracle's mysqldump, taken from the official MySQL image (glibc). It is the one
+# client MariaDB's cannot stand in for: mariadb-dump writes STORED GENERATED
+# column values into column-less INSERTs, which MySQL rejects on restore with
+# ERROR 3105, leaving those tables empty. Only mysqldump is taken — restores and
+# connection tests keep using the MariaDB client, which reads either dump.
+# Oracle ships no musl build and gcompat alone is not enough (the binary wants
+# glibc-only symbols such as fcntl64), so the loader and its libraries travel
+# with it, exactly like the Firebird tooling below. The image is multi-arch, so
+# this stage follows the build platform without an arch switch.
+FROM mysql:8.0 AS mysqlclient
+RUN mkdir -p /opt/mysql/bin /opt/mysql/compat \
+    && cp /usr/bin/mysqldump /opt/mysql/bin/ \
+    && ldd /usr/bin/mysqldump | awk '/=> \//{print $3}' | xargs -I{} cp -L {} /opt/mysql/compat/ \
+    && cp -L "$(ldd /usr/bin/mysqldump | grep -o '/[^ ]*ld-linux[^ ]*\.so[^ ]*')" /opt/mysql/compat/ld.so
+
 # Build the sqlpackage CLI for the target arch. Microsoft only ships a self-contained
 # x64 zip (no arm64 build), so for multi-arch we install the framework-dependent
 # dotnet tool, which runs on the .NET runtime present in the final image. The Alpine
@@ -79,6 +94,18 @@ RUN case "${TARGETARCH}" in \
           /tmp/mongodb-database-tools-*/bin/mongorestore /usr/local/bin/ \
     && chmod +x /usr/local/bin/mongodump /usr/local/bin/mongorestore \
     && rm -rf /tmp/mtools.tgz /tmp/mongodb-database-tools-*
+
+# Oracle mysqldump, assembled in the mysqlclient stage above. /usr/local/bin
+# comes first on PATH, so this deliberately shadows the mysqldump alias
+# mariadb-client leaves at /usr/bin/mysqldump — the app asks for `mysqldump` and
+# must get Oracle's. The three checks are the build-time proof of both halves: a
+# broken loader or a lost shadow fails the build, not the first MySQL backup.
+COPY --from=mysqlclient /opt/mysql /opt/mysql
+COPY scripts/mysql-client/mysqldump /usr/local/bin/mysqldump
+RUN chmod 755 /usr/local/bin/mysqldump \
+    && mysqldump --version \
+    && ! mysqldump --version | grep -qi mariadb \
+    && mariadb-dump --version
 
 # Install .NET 8 runtime — required by the framework-dependent sqlpackage tool
 # (base Microsoft.NETCore.App only; no ASP.NET Core needed). Pulled from

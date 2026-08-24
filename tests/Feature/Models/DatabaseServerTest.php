@@ -122,7 +122,7 @@ test('buildExtraConfig folds type-specific fields into extra_config', function (
     expect($data['extra_config'])->toEqual($expected);
 
     // Handled keys are always pulled out of $data.
-    foreach (['auth_source', 'dump_flags', 'excluded_tables', 'dump_format', 'dump_privileges', 'ssl_enabled'] as $key) {
+    foreach (['auth_source', 'dump_flags', 'excluded_tables', 'dump_format', 'dump_privileges', 'ssl_enabled', 'mysql_variant'] as $key) {
         expect($data)->not->toHaveKey($key);
     }
 })->with([
@@ -139,6 +139,15 @@ test('buildExtraConfig folds type-specific fields into extra_config', function (
     ],
     'keeps ssl_enabled for postgres' => [
         ['database_type' => 'postgres', 'ssl_enabled' => true], null, null, ['ssl_enabled' => true],
+    ],
+    'keeps the oracle mysql client variant' => [
+        ['database_type' => 'mysql', 'mysql_variant' => 'mysql'], null, null, ['mysql_variant' => 'mysql'],
+    ],
+    'drops the default mariadb variant' => [
+        ['database_type' => 'mysql', 'mysql_variant' => 'mariadb'], null, null, null,
+    ],
+    'drops the mysql variant for another type' => [
+        ['database_type' => 'postgres', 'mysql_variant' => 'mysql'], null, null, null,
     ],
     'drops field not relevant to the type' => [
         ['database_type' => 'sqlite', 'dump_flags' => '--anything'], null, null, null,

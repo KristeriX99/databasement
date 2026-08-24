@@ -12,6 +12,7 @@ use App\Rules\ExcludedTableNames;
 use App\Rules\SafeDatabasePath;
 use App\Rules\SafeHost;
 use App\Rules\SafePath;
+use App\Services\Backup\Databases\MysqlDatabase;
 use App\Services\CurrentOrganization;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -79,6 +80,10 @@ class SaveDatabaseServerRequest extends FormRequest
         if ($type === 'postgres') {
             $rules['dump_format'] = ['nullable', 'string', Rule::in(['plain', 'custom'])];
             $rules['dump_privileges'] = 'boolean';
+        }
+
+        if ($type === 'mysql') {
+            $rules['mysql_variant'] = ['nullable', 'string', Rule::in(MysqlDatabase::variants())];
         }
 
         if (in_array($type, ['mongodb', 'redis'])) {

@@ -722,3 +722,37 @@ test('backup endpoint uses the first backup when no backup_id is provided', func
     $snapshot = \App\Models\Snapshot::first();
     expect($snapshot?->backup_id)->toBe($backup->id);
 });
+
+test('store moves mysql_variant to extra_config', function () {
+    $user = User::factory()->withAbilities([Ability::ManageDatabaseServers->value])->create();
+
+    $this->actingAs($user, 'sanctum')
+        ->postJson('/api/v1/database-servers', [
+            'name' => 'Oracle MySQL',
+            'database_type' => 'mysql',
+            'host' => 'localhost',
+            'port' => 3306,
+            'username' => 'root',
+            'mysql_variant' => 'mysql',
+            'backups_enabled' => false,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.extra_config.mysql_variant', 'mysql');
+});
+
+test('store rejects an unknown mysql_variant', function () {
+    // The value picks a shell binary, so the whitelist is worth pinning.
+    $user = User::factory()->withAbilities([Ability::ManageDatabaseServers->value])->create();
+
+    $this->actingAs($user, 'sanctum')
+        ->postJson('/api/v1/database-servers', [
+            'name' => 'Bogus MySQL',
+            'database_type' => 'mysql',
+            'host' => 'localhost',
+            'port' => 3306,
+            'username' => 'root',
+            'mysql_variant' => 'percona',
+            'backups_enabled' => false,
+        ])
+        ->assertJsonValidationErrors('mysql_variant');
+});
