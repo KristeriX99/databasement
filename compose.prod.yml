@@ -1,0 +1,60 @@
+# Production stack built from this working tree instead of a published image.
+#
+#   docker compose -f compose.prod.yml up -d --build
+#
+# builds the base image from docker/php/, builds the application on top of it,
+# and starts app + worker — one command, no registry involved.
+#
+# How the single build works: the repo-root Dockerfile pulls its base by name
+# (ARG BASE_IMAGE=davidcrty/databasement-php:latest). The named build context
+# below shadows that name with the locally built `base` service, so Compose
+# builds base first and the app build consumes it directly. The key must be the
+# repository name WITHOUT a tag — with the tag, BuildKit ignores the override
+# and pulls from the registry instead. The repo-root Dockerfile needs no change,
+# so `docker build --build-arg BASE_IMAGE=… .` still works as before.
+#
+# Defaults to SQLite. For MySQL or PostgreSQL, add the server as a service and
+# point .env at it, following docs/docs/self-hosting/docker-compose.md.
+
+services:
+  # Build-only: `replicas: 0` keeps `up` from starting it. It cannot use
+  # `profiles` instead — a profiled service is dropped from the model and the
+  # named context below then fails to resolve it.
+  base:
+    build:
+      context: docker/php
+    image: databasement-php:local
+    deploy:
+      replicas: 0
+
+  app:
+    build:
+      context: .
+      additional_contexts:
+        davidcrty/databasement-php: "service:base"
+    image: databasement:local
+    container_name: databasement
+    restart: unless-stopped
+    ports:
+      - "2226:2226"
+    env_file: .env
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2226/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    image: databasement:local
+    restart: unless-stopped
+    deploy:
+      replicas: 1 # increase to run more backups in parallel
+    command: sh -c "php artisan db:wait --check-migrations && php artisan queue:work --queue=backups,default --tries=3 --timeout=3600 --sleep=3 --max-jobs=1000"
+    env_file: .env
+    volumes:
+      - ./data:/data
+    depends_on:
+      app:
+        condition: service_healthy
