@@ -106,8 +106,17 @@ class MysqlDatabase implements DatabaseInterface
      * SSL flag for the dump client.
      *
      * mysqldump dropped --ssl, --skip_ssl and --ssl-verify-server-cert in 8.0;
-     * --ssl-mode replaces all three. REQUIRED encrypts without verifying the
-     * certificate, which is what the MariaDB pair above asks for.
+     * --ssl-mode replaces all three. Neither mode below verifies the server
+     * certificate, matching what the MariaDB pair above asks for.
+     *
+     * - ssl_enabled = true  → REQUIRED (refuse to run unencrypted).
+     * - ssl_enabled = false → PREFERRED, *not* DISABLED. MySQL 8 defaults its
+     *   accounts to caching_sha2_password, whose first authentication needs a
+     *   secure channel; DISABLED makes the server reject the dump outright with
+     *   "Authentication requires secure connection" (error 2061) on any account
+     *   the server has not already cached. PREFERRED encrypts when the server
+     *   offers TLS and still falls back to plaintext when it does not, so it
+     *   works everywhere DISABLED would and in the cases where it would not.
      */
     private function getDumpSslFlag(): string
     {
@@ -117,7 +126,7 @@ class MysqlDatabase implements DatabaseInterface
 
         return ! empty($this->config['ssl_enabled'])
             ? '--ssl-mode=REQUIRED'
-            : '--ssl-mode=DISABLED';
+            : '--ssl-mode=PREFERRED';
     }
 
     /**

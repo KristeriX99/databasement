@@ -29,7 +29,7 @@ mariadb-dump --single-transaction --routines --add-drop-table --hex-blob --quote
 
 # MySQL (Oracle)
 mysqldump --single-transaction --routines --add-drop-table --hex-blob --quote-names \
-  --no-tablespaces --column-statistics=0 --set-gtid-purged=OFF --ssl-mode=DISABLED \
+  --no-tablespaces --column-statistics=0 --set-gtid-purged=OFF --ssl-mode=PREFERRED \
   --host='...' --port='...' --user='...' --password='...' 'database_name' > dump.sql
 ```
 

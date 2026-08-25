@@ -263,7 +263,7 @@ function oracleMysqlDatabase(array $overrides = []): MysqlDatabase
 test('dump uses mysqldump for the mysql variant', function () {
     $result = oracleMysqlDatabase()->dump('/tmp/dump.sql');
 
-    expect($result->command)->toBe("mysqldump --single-transaction --routines --add-drop-table --hex-blob --quote-names --no-tablespaces --column-statistics=0 --set-gtid-purged=OFF --ssl-mode=DISABLED --host='db.local' --port='3306' --user='root' --password='secret' 'myapp' > '/tmp/dump.sql'")
+    expect($result->command)->toBe("mysqldump --single-transaction --routines --add-drop-table --hex-blob --quote-names --no-tablespaces --column-statistics=0 --set-gtid-purged=OFF --ssl-mode=PREFERRED --host='db.local' --port='3306' --user='root' --password='secret' 'myapp' > '/tmp/dump.sql'")
         ->and($result->command)->not->toContain('mariadb-dump');
 });
 
@@ -271,11 +271,20 @@ test('dump uses ssl-mode=REQUIRED for the mysql variant when ssl_enabled is true
     $result = oracleMysqlDatabase(['ssl_enabled' => true])->dump('/tmp/dump.sql');
 
     expect($result->command)->toContain('--ssl-mode=REQUIRED')
-        ->not->toContain('--ssl-mode=DISABLED')
+        ->not->toContain('--ssl-mode=PREFERRED')
         // mysqldump 8.0 removed all three of these; passing any of them aborts the dump.
         ->not->toContain('--ssl ')
         ->not->toContain('--ssl-verify-server-cert')
         ->not->toContain('--skip_ssl');
+});
+
+// MySQL 8 defaults accounts to caching_sha2_password, which refuses to complete
+// a first authentication over plaintext. --ssl-mode=DISABLED therefore fails with
+// error 2061 against a stock server, where PREFERRED negotiates TLS and succeeds.
+test('dump never disables ssl outright for the mysql variant', function () {
+    expect(oracleMysqlDatabase()->dump('/tmp/dump.sql')->command)
+        ->toContain('--ssl-mode=PREFERRED')
+        ->not->toContain('--ssl-mode=DISABLED');
 });
 
 test('dump keeps --routines for the mysql variant on versions the MariaDB client rejects', function () {
