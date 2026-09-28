@@ -112,7 +112,7 @@ class SaveDatabaseServerRequest extends FormRequest
             $rules['backups.*.retention_days'] = 'nullable|integer|min:1|max:365';
             $rules['backups.*.gfs_keep_daily'] = 'nullable|integer|min:0|max:90';
             $rules['backups.*.gfs_keep_weekly'] = 'nullable|integer|min:0|max:52';
-            $rules['backups.*.gfs_keep_monthly'] = 'nullable|integer|min:0|max:24';
+            $rules['backups.*.gfs_keep_monthly'] = 'nullable|integer|min:0|max:60';
 
             if ($type === 'sqlite') {
                 $rules['backups.*.database_names'] = 'required|array|min:1';

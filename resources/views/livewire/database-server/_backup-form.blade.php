@@ -553,7 +553,7 @@
                                 type="number"
                                 wire:model.live.debounce.400ms="form.backups.{{ $index }}.gfs_keep_monthly"
                                 min="0"
-                                max="24"
+                                max="60"
                                 placeholder="0"
                                 class="w-full rounded-md border border-base-300 bg-base-200/30 px-2.5 py-1.5 text-center text-sm font-semibold tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />

@@ -222,7 +222,7 @@ final class BackupForm
         } elseif ($retentionPolicy === Backup::RETENTION_GFS) {
             $rules[$prefix.'gfs_keep_daily'] = 'nullable|integer|min:0|max:90';
             $rules[$prefix.'gfs_keep_weekly'] = 'nullable|integer|min:0|max:52';
-            $rules[$prefix.'gfs_keep_monthly'] = 'nullable|integer|min:0|max:24';
+            $rules[$prefix.'gfs_keep_monthly'] = 'nullable|integer|min:0|max:60';
         }
 
         // Path-based types (SQLite, Firebird) store file paths in
